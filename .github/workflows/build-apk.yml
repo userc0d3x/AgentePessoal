@@ -5,6 +5,9 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -26,9 +29,23 @@ jobs:
       - name: Compilar APK
         run: ./gradlew assembleDebug --stacktrace
 
-      - name: Publicar APK
+      - name: Publicar artefato do APK
         uses: actions/upload-artifact@v4
         with:
           name: agente-pessoal-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publicar release para atualizações do aplicativo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" app/build/outputs/apk/debug/app-debug.apk --clobber
+          else
+            gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk \
+              --title "Agente Pessoal ${VERSION}" \
+              --notes "APK da versão ${VERSION} do Agente Pessoal."
+          fi
