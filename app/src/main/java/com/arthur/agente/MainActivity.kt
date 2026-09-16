@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -45,6 +46,7 @@ fun AgentePessoalApp() {
     val contexto = LocalContext.current
     val orquestrador = remember { OrquestradorSuporte() }
     val escopo = rememberCoroutineScope()
+    val listaState = rememberLazyListState()
     var ticket by remember { mutableStateOf("") }
     var resposta by remember { mutableStateOf("") }
     var analise by remember { mutableStateOf<AnaliseTicket?>(null) }
@@ -59,6 +61,19 @@ fun AgentePessoalApp() {
         mensagensWhatsApp = ArmazenamentoWhatsApp.carregar(contexto)
         whatsAtivo = NotificationManagerCompat.getEnabledListenerPackages(contexto)
             .contains(contexto.packageName)
+    }
+
+    fun selecionarMensagemParaAnalise(texto: String) {
+        ticket = texto
+        resposta = ""
+        analise = null
+        escopo.launch {
+            // O índice 0 é o cabeçalho do WhatsApp; a área de análise fica depois das mensagens.
+            listaState.animateScrollToItem(0)
+            delay(50)
+            val indiceAnalise = mensagensWhatsApp.take(10).size + 1
+            listaState.animateScrollToItem(indiceAnalise)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -121,6 +136,7 @@ fun AgentePessoalApp() {
         topBar = { TopAppBar(title = { Text("Agente Pessoal") }) }
     ) { padding ->
         LazyColumn(
+            state = listaState,
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -154,7 +170,9 @@ fun AgentePessoalApp() {
                                 style = MaterialTheme.typography.labelSmall
                             )
                             Spacer(modifier = Modifier.height(6.dp))
-                            OutlinedButton(onClick = { ticket = mensagem.texto }) {
+                            OutlinedButton(onClick = {
+                                selecionarMensagemParaAnalise(mensagem.texto)
+                            }) {
                                 Text("Analisar esta mensagem")
                             }
                         }
