@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
@@ -18,15 +20,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
+import com.arthur.agente.atualizacao.AtualizadorApp
 import com.arthur.agente.suporte.AnaliseTicket
 import com.arthur.agente.suporte.BaseConhecimento
 import com.arthur.agente.suporte.NivelRisco
 import com.arthur.agente.suporte.OrquestradorSuporte
 import com.arthur.agente.whatsapp.ArmazenamentoWhatsApp
-import com.arthur.agente.whatsapp.MensagemWhatsApp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +51,9 @@ fun AgentePessoalApp() {
     var mostrarBase by remember { mutableStateOf(false) }
     var mensagensWhatsApp by remember { mutableStateOf(ArmazenamentoWhatsApp.carregar(contexto)) }
     var whatsAtivo by remember { mutableStateOf(false) }
+    var atualizacao by remember { mutableStateOf<AtualizadorApp.Atualizacao?>(null) }
+    var verificandoAtualizacao by remember { mutableStateOf(true) }
+    var baixandoAtualizacao by remember { mutableStateOf(false) }
 
     fun atualizarWhatsApp() {
         mensagensWhatsApp = ArmazenamentoWhatsApp.carregar(contexto)
@@ -53,7 +61,56 @@ fun AgentePessoalApp() {
             .contains(contexto.packageName)
     }
 
-    LaunchedEffect(Unit) { atualizarWhatsApp() }
+    LaunchedEffect(Unit) {
+        atualizarWhatsApp()
+        while (true) {
+            delay(700)
+            atualizarWhatsApp()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        verificandoAtualizacao = true
+        atualizacao = withContext(Dispatchers.IO) { AtualizadorApp.verificar() }
+        verificandoAtualizacao = false
+    }
+
+    if (atualizacao != null && !baixandoAtualizacao) {
+        AlertDialog(
+            onDismissRequest = { atualizacao = null },
+            title = { Text("Nova versão disponível") },
+            text = {
+                Text("A versão ${atualizacao!!.versao} do Agente Pessoal está disponível. Deseja atualizar agora?")
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val nova = atualizacao ?: return@Button
+                    atualizacao = null
+                    baixandoAtualizacao = true
+                    // O download é executado fora da UI; ao terminar, o instalador do Android é aberto.
+                    kotlinx.coroutines.GlobalScope.launch(Dispatchers.Main) {
+                        val sucesso = AtualizadorApp.baixarEInstalar(contexto, nova)
+                        baixandoAtualizacao = false
+                        if (!sucesso) {
+                            Toast.makeText(contexto, "Não foi possível baixar a atualização", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }) { Text("Atualizar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { atualizacao = null }) { Text("Agora não") }
+            }
+        )
+    }
+
+    if (baixandoAtualizacao) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Baixando atualização") },
+            text = { Text("Aguarde enquanto o novo APK é baixado...") },
+            confirmButton = {}
+        )
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Agente Pessoal") }) }
@@ -65,7 +122,7 @@ fun AgentePessoalApp() {
             item {
                 Text("WhatsApp", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    if (whatsAtivo) "Leitura de notificações ativa. O agente pode receber novas mensagens do WhatsApp."
+                    if (whatsAtivo) "Leitura de notificações ativa. Novas mensagens são atualizadas automaticamente."
                     else "Ative o acesso às notificações para o agente conseguir ler mensagens recebidas.",
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -193,6 +250,16 @@ fun AgentePessoalApp() {
 
             item {
                 HorizontalDivider()
+                Text("Atualização", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    if (verificandoAtualizacao) "Verificando se existe uma nova versão..."
+                    else "O app verifica atualizações automaticamente ao abrir.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            item {
+                HorizontalDivider()
                 TextButton(onClick = { mostrarBase = !mostrarBase }) {
                     Text(if (mostrarBase) "Ocultar base de conhecimento" else "Ver base de conhecimento")
                 }
@@ -212,7 +279,7 @@ fun AgentePessoalApp() {
 
             item {
                 Text(
-                    "Integração atual: WhatsApp por notificações + preparação de resposta. Não há envio automático nem acesso às conversas internas do WhatsApp.",
+                    "Integração atual: WhatsApp por notificações + atualização automática da tela + verificação de novas versões. O envio de mensagens continua manual.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
