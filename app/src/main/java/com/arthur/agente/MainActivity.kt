@@ -4,8 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
@@ -31,6 +29,7 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
@@ -45,6 +44,7 @@ class MainActivity : ComponentActivity() {
 fun AgentePessoalApp() {
     val contexto = LocalContext.current
     val orquestrador = remember { OrquestradorSuporte() }
+    val escopo = rememberCoroutineScope()
     var ticket by remember { mutableStateOf("") }
     var resposta by remember { mutableStateOf("") }
     var analise by remember { mutableStateOf<AnaliseTicket?>(null) }
@@ -84,15 +84,20 @@ fun AgentePessoalApp() {
             },
             confirmButton = {
                 Button(onClick = {
-                    val nova = atualizacao ?: return@Button
-                    atualizacao = null
-                    baixandoAtualizacao = true
-                    // O download é executado fora da UI; ao terminar, o instalador do Android é aberto.
-                    kotlinx.coroutines.GlobalScope.launch(Dispatchers.Main) {
-                        val sucesso = AtualizadorApp.baixarEInstalar(contexto, nova)
-                        baixandoAtualizacao = false
-                        if (!sucesso) {
-                            Toast.makeText(contexto, "Não foi possível baixar a atualização", Toast.LENGTH_LONG).show()
+                    val nova = atualizacao
+                    if (nova != null) {
+                        atualizacao = null
+                        baixandoAtualizacao = true
+                        escopo.launch(Dispatchers.Main) {
+                            val sucesso = AtualizadorApp.baixarEInstalar(contexto, nova)
+                            baixandoAtualizacao = false
+                            if (!sucesso) {
+                                Toast.makeText(
+                                    contexto,
+                                    "Não foi possível baixar a atualização",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                         }
                     }
                 }) { Text("Atualizar") }
