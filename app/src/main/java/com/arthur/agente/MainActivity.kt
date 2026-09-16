@@ -68,10 +68,9 @@ fun AgentePessoalApp() {
         resposta = ""
         analise = null
         escopo.launch {
-            // O índice 0 é o cabeçalho do WhatsApp; a área de análise fica depois das mensagens.
-            listaState.animateScrollToItem(0)
-            delay(50)
-            val indiceAnalise = mensagensWhatsApp.take(10).size + 1
+            // Cabeçalho = 0, título das mensagens = 1, mensagens = 2..11, análise = 12.
+            // Se houver menos mensagens, o índice também é ajustado.
+            val indiceAnalise = if (mensagensWhatsApp.isEmpty()) 1 else mensagensWhatsApp.take(10).size + 2
             listaState.animateScrollToItem(indiceAnalise)
         }
     }
